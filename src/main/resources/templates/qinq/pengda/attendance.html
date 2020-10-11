@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org" xmlns:shiro="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('芃达考勤报表管理')"/>
+    <th:block th:include="include :: bootstrap-fileinput-css"/>
+</head>
+<body class="gray-bg">
+<div class="tabs-container">
+    <ul class="nav nav-tabs">
+        <li class="active"><a data-toggle="tab" href="#tab-1" aria-expanded="true"> 考勤报表一键生成</a>
+        </li>
+    </ul>
+    <div class="tab-content">
+        <div id="tab-1" class="tab-pane active">
+            <div class="panel-body">
+                <div class="ibox-content">
+                    <div class="col-sm-12">
+                        <div class="row">
+                            <div class="form-group">
+                                <div class="col-sm-12">
+                                    <p style="font-size:18px;font-weight: bold;">使用说明：</p>
+                                    <p>1. 点击选择文件按钮，选择`<font color="red" style="font-weight: bold;">从钉钉中导出的考勤报表【考勤报表中的第二个表格必须是每日统计类型，系统将主要根据该表格来分析考勤记录】。</font>
+                                    </p>
+                                    <p>2. <font color="red">只能上传后缀为`.xls`或`.xlsx`的文件。</font></p>
+                                    <p>3. 选择相关考勤报表后，点击上传按钮，此时系统会开始生成特定的结果报表；<font color="red"
+                                                                                  style="font-weight: bold;">生成的报表路径跟上传文件的路径一致。文件名为原来的文件名后追加_qinq.xlsx</font>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <br/><br/>
+                        <div class="row">
+                            <form id="form-attendance-upload" class="form-horizontal">
+                                <div class="form-group">
+                                    <div class="file-loading">
+                                        <input id="attendanceUpload" name="attendanceUpload" type="file">
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<th:block th:include="include :: bootstrap-fileinput-js"/>
+<script type="text/javascript">
+    $(document).ready(function () {
+        $("#attendanceUpload").fileinput({
+            theme: 'explorer-fas',
+            allowedFileExtensions: ['xls', 'xlsx'],
+            dropZoneTitle: '你也可以直接拖拽文件到这里',
+            fileSingle: "从钉钉中导出的考勤报表【考勤报表中的第二个表格必须是每日统计类型，系统将主要根据该表格来分析考勤记录】。",
+            browseLabel: "选择钉钉考勤报表",
+            uploadUrl: '/qinq/pengda/attendance/upload',
+            uploadExtraData: new FormData(document.getElementById("form-attendance-upload")),
+            maxFileCount: 1,
+            autoReplace: true
+        }).on('fileuploaded', function (event, data, previewId, index) {
+        }).on('fileremoved', function (event, id, index) {
+        })
+    });
+</script>
+</body>
+</html>
