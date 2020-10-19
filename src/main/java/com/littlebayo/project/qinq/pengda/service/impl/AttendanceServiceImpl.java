@@ -202,13 +202,33 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (null == wb || CollectionUtils.isEmpty(dingdingDailyStatistics)) {
             return wb;
         }
-        String monthStr = "x";
-        // 从clockInTimeAndDate解析x
-        monthStr = clockInTimeAndDate.substring(clockInTimeAndDate.indexOf("：") + 1, clockInTimeAndDate.indexOf(" 至"));
-        monthStr = monthStr.substring(monthStr.indexOf("-") + 1, monthStr.lastIndexOf("-"));
-        monthStr = (monthStr.charAt(0) == '0') ? monthStr.substring(1) : monthStr;
-        Sheet sheet = wb.createSheet(monthStr + "月考勤表统计");
+        Sheet sheet = wb.createSheet(getMonthStr() + "月考勤表统计");
 
+        // 获取日期列表
+        List<DingdingPunchInRecord> punchInRecords = dingdingDailyStatistics.get(0).getPunchInRecords();
+        // 行标
+        int rowIndex = 0;
+        /**
+         * 开始填充数据
+         */
+
+        /**
+         * 1.设置第一行的标题
+         */
+        Row row0 = sheet.createRow(rowIndex++);
+        Cell row0cell0 = row0.createCell(0, CellType.STRING);
+        row0cell0.setCellValue("杭州芃达网络科技有限公司考勤表");
+        // 设置第一行标题的单元格格式
+        CellStyle titleCellStyle = wb.createCellStyle();
+        titleCellStyle.setAlignment(HorizontalAlignment.CENTER);
+        Font font = wb.createFont();
+        font.setFontName("微软雅黑");
+        font.setFontHeightInPoints((short) 24);
+        font.setBold(true);
+        titleCellStyle.setFont(font);
+        row0cell0.setCellStyle(titleCellStyle);
+        CellRangeAddress region = new CellRangeAddress(0, 0, 0, punchInRecords.size() + 15);
+        sheet.addMergedRegion(region);
         // TODO
 
         return wb;
@@ -225,12 +245,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (null == wb || CollectionUtils.isEmpty(dingdingDailyStatistics)) {
             return wb;
         }
-        String monthStr = "x";
-        // 从clockInTimeAndDate解析x
-        monthStr = clockInTimeAndDate.substring(clockInTimeAndDate.indexOf("：") + 1, clockInTimeAndDate.indexOf(" 至"));
-        monthStr = monthStr.substring(monthStr.indexOf("-") + 1, monthStr.lastIndexOf("-"));
-        monthStr = (monthStr.charAt(0) == '0') ? monthStr.substring(1) : monthStr;
-        Sheet sheet = wb.createSheet(monthStr + "月打卡时间");
+
+        Sheet sheet = wb.createSheet(getMonthStr() + "月打卡时间");
 
         // 获取日期列表
         List<DingdingPunchInRecord> punchInRecords = dingdingDailyStatistics.get(0).getPunchInRecords();
@@ -239,10 +255,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         /**
          * 开始填充数据
          */
-        // 1.设置第一行的标题
+
+        /**
+         * 1.设置第一行的标题
+         */
         String title = clockInTimeAndDate.replace("每日统计表", "打卡时间表");
-        Row row = sheet.createRow(rowIndex++);
-        row.createCell(0, CellType.STRING).setCellValue(title);
+        Row row0 = sheet.createRow(rowIndex++);
+        Cell row0cell0 = row0.createCell(0, CellType.STRING);
+        row0cell0.setCellValue(title);
         // 设置第一行标题的单元格格式
         CellStyle titleCellStyle = wb.createCellStyle();
         titleCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
@@ -252,26 +272,38 @@ public class AttendanceServiceImpl implements AttendanceService {
         font.setFontHeightInPoints((short) 24);
         font.setBold(true);
         titleCellStyle.setFont(font);
-        row.setRowStyle(titleCellStyle);
-        CellRangeAddress region = new CellRangeAddress(0, 0, 0, punchInRecords.size() + 4);
+        row0cell0.setCellStyle(titleCellStyle);
+        CellRangeAddress region = new CellRangeAddress(0, 0, 0, punchInRecords.size() + 3);
         sheet.addMergedRegion(region);
 
-        // 2. 设置第二行标题的单元格格式
+        /**
+         * 2.设置第二行的标题
+         */
+        // 设置第二行标题的单元格格式
         Row row1 = sheet.createRow(rowIndex++);
         CellStyle titleCellStyle2 = wb.createCellStyle();
-        titleCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        titleCellStyle.setFillForegroundColor(HSSFColor.LIGHT_YELLOW.index);
+        titleCellStyle2.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        titleCellStyle2.setFillForegroundColor(HSSFColor.LIGHT_YELLOW.index);
+        titleCellStyle2.setAlignment(HorizontalAlignment.CENTER);
         Font font2 = wb.createFont();
         font2.setFontName("新宋体");
         font2.setFontHeightInPoints((short) 12);
         font2.setBold(true);
-        titleCellStyle2.setFont(font);
-        row1.setRowStyle(titleCellStyle2);
+        titleCellStyle2.setFont(font2);
         // 设置第二行内容
-        row1.createCell(0, CellType.STRING).setCellValue("姓名");
-        row1.createCell(1, CellType.STRING).setCellValue("考勤组");
-        row1.createCell(2, CellType.STRING).setCellValue("部门");
-        row1.createCell(3, CellType.STRING).setCellValue("职位");
+        Cell row1cell0 = row1.createCell(0, CellType.STRING);
+        row1cell0.setCellValue("姓名");
+        row1cell0.setCellStyle(titleCellStyle2);
+        Cell row1cell1 = row1.createCell(1, CellType.STRING);
+        row1cell1.setCellValue("考勤组");
+        row1cell1.setCellStyle(titleCellStyle2);
+        Cell row1cell2 = row1.createCell(2, CellType.STRING);
+        row1cell2.setCellValue("部门");
+        row1cell2.setCellStyle(titleCellStyle2);
+        Cell row1cell3 = row1.createCell(3, CellType.STRING);
+        row1cell3.setCellValue("职位");
+        row1cell3.setCellStyle(titleCellStyle2);
+
         // 获取日期列表
         Map<String, String> datatimeStrMap = punchInRecords.stream().map(p -> p.getDateTime()).collect(Collectors.toMap(
                 p -> p.substring(0, p.indexOf(" ")),
@@ -286,7 +318,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         int i = 4;
         TreeSet<String> treeset = new TreeSet<>(datatimeStrMap.keySet());
         for (String key : treeset) {
-            row1.createCell(i++, CellType.STRING).setCellValue(datatimeStrMap.get(key));
+            Cell row1celli = row1.createCell(i++, CellType.STRING);
+            row1celli.setCellValue(datatimeStrMap.get(key));
+            row1celli.setCellStyle(titleCellStyle2);
         }
 
         // 3. 开始填充内容数据
@@ -322,6 +356,22 @@ public class AttendanceServiceImpl implements AttendanceService {
             cell.setCellType(CellType.STRING);
         }
         return cell.getStringCellValue();
+    }
+
+    /**
+     * @param
+     * @return java.lang.String
+     * @description 获取表格月份
+     * @author cuiqiongyu
+     * @date 22:06 2020-10-19
+     **/
+    private String getMonthStr() {
+        String monthStr = "x";
+        // 从clockInTimeAndDate解析x
+        monthStr = clockInTimeAndDate.substring(clockInTimeAndDate.indexOf("：") + 1, clockInTimeAndDate.indexOf(" 至"));
+        monthStr = monthStr.substring(monthStr.indexOf("-") + 1, monthStr.lastIndexOf("-"));
+        monthStr = (monthStr.charAt(0) == '0') ? monthStr.substring(1) : monthStr;
+        return monthStr;
     }
 
 }
