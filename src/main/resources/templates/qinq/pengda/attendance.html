@@ -23,7 +23,7 @@
                                     </p>
                                     <p>2. <font color="red">只能上传后缀为`.xls`或`.xlsx`的文件。</font></p>
                                     <p>3. 选择相关考勤报表后，点击上传按钮，此时系统会开始生成特定的结果报表；<font color="red"
-                                                                                  style="font-weight: bold;">生成的报表路径为桌面路径。文件名为原来的文件名后追加_qinq.xlsx</font>
+                                                                                  style="font-weight: bold;">文件名为原来的文件名后追加_qinq.xlsx</font>
                                     </p>
                                 </div>
                             </div>
@@ -69,6 +69,7 @@
 
             if (responseCode == 0) { // 上传成功
                 $.modal.alertSuccess(responseMsg);
+                window.location.href = ctx + "common/download?fileName=" + encodeURI(responseMsg) + "&delete=" + true;
             } else { // 上传失败
                 $.modal.alertError("钉钉考勤报表上传失败，" + responseMsg);
             }
