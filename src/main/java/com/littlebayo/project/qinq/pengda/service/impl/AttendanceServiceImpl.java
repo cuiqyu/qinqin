@@ -6,6 +6,7 @@ import com.littlebayo.common.utils.StringUtils;
 import com.littlebayo.framework.config.RuoYiConfig;
 import com.littlebayo.framework.web.domain.AjaxResult;
 import com.littlebayo.project.qinq.pengda.domain.DingdingDailyStatistics;
+import com.littlebayo.project.qinq.pengda.domain.DingdingMonthlyStatistics;
 import com.littlebayo.project.qinq.pengda.domain.DingdingPunchInRecord;
 import com.littlebayo.project.qinq.pengda.service.AttendanceService;
 import org.apache.commons.collections.CollectionUtils;
@@ -24,6 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 考勤服务
@@ -44,6 +46,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 需要解析的钉钉报表的表名
      */
     private static final String ATTENDANCE_DAILYSTATISTICSDATA_NAME = "每日统计";
+    private static final String ATTENDANCE_MONTHLYSTATISTICSDATA_NAME = "月度汇总";
     /**
      * 生成的考勤报表添加的文件名后缀
      */
@@ -77,7 +80,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // 获取文件的真实名称，去除文件后缀的
         String fileRealName = filename.substring(0, filename.lastIndexOf("."));
         // 开始解析第一个表格文件
-        // TODO
+        List<DingdingMonthlyStatistics> dingdingMonthlyStatistics = parseDingdingExcelMonthlyStatisticsData(file.getInputStream());
         // 开始解析第二个表格文件
         List<DingdingDailyStatistics> dingdingDailyStatistics = parseDingdingExcelDailyStatisticsData(file.getInputStream());
 
@@ -86,7 +89,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         Workbook wb = new SXSSFWorkbook(500);
 
         // 2. 生成x月考勤表统计【表一】
-        wb = generatorXmonthCheckWorkAttendance(dingdingDailyStatistics, wb);
+        wb = generatorXmonthCheckWorkAttendance(dingdingDailyStatistics, dingdingMonthlyStatistics, wb);
 
         // 3. 生成x月打卡时间【表二】
         wb = generatorXmonthClockInTime(dingdingDailyStatistics, wb);
@@ -99,6 +102,57 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
+     * 解析钉钉考勤报表每月统计（第一张表格）
+     *
+     * @param inputStream 文件输入流
+     * @return
+     */
+    private List<DingdingMonthlyStatistics> parseDingdingExcelMonthlyStatisticsData(InputStream inputStream) throws IOException, InvalidFormatException {
+        // 工作簿对象
+        Workbook wb = WorkbookFactory.create(inputStream);
+        // 获取【月度汇总】表格
+        Sheet sheet = wb.getSheet(ATTENDANCE_MONTHLYSTATISTICSDATA_NAME);
+        if (null == sheet) {
+            logger.error("解析钉钉考勤报表失败，未找到报表文件中的[月度汇总]表格");
+            throw new BusinessException("未找到报表文件中的[月度汇总]表格");
+        }
+
+        // 月度汇总数据内容
+        List<DingdingMonthlyStatistics> dataList = new ArrayList<>();
+        // 获取总行数
+        int rows = sheet.getPhysicalNumberOfRows();
+        if (rows <= 4) {
+            return dataList;
+        }
+
+        // 开始统计的行数 从第五行开始统计
+        for (int i = 4; i < rows; i++) {
+            Row row = sheet.getRow(i);
+            int j = 0;
+            DingdingMonthlyStatistics monthlyStatistics = new DingdingMonthlyStatistics(
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
+                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), null
+            );
+
+            HashMap<Integer, String> hashMap = new HashMap<>();
+            // 假设每个月按照最大的天数 31天来算
+            for (int m = 1; m <= 31; m++) {
+                hashMap.put(m, getCellStringValue(row.getCell(j++)));
+            }
+            monthlyStatistics.setEverydaySummary(hashMap);
+            dataList.add(monthlyStatistics);
+        }
+
+        return dataList;
+    }
+
+    /**
      * 解析钉钉考勤报表每日统计（第二张表格）
      *
      * @param inputStream 文件输入流
@@ -106,7 +160,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private List<DingdingDailyStatistics> parseDingdingExcelDailyStatisticsData(InputStream inputStream) throws IOException, InvalidFormatException {
         // 工作簿对象
         Workbook wb = WorkbookFactory.create(inputStream);
-        // 获取每日统计表格
+        // 获取【每日统计】表格
         Sheet sheet = wb.getSheet(ATTENDANCE_DAILYSTATISTICSDATA_NAME);
         if (null == sheet) {
             logger.error("解析钉钉考勤报表失败，未找到报表文件中的[每日统计]表格");
@@ -190,35 +244,23 @@ public class AttendanceServiceImpl implements AttendanceService {
     /**
      * TODO 生成x月考勤表统计【表一】
      *
-     * @param dingdingDailyStatistics 用户的打卡记录
-     * @param wb                      输出的excel
+     * @param dingdingDailyStatistics   用户的打卡记录
+     * @param dingdingMonthlyStatistics 用户的打卡月统计
+     * @param wb                        输出的excel
      * @return 输出excel
      */
-    private Workbook generatorXmonthCheckWorkAttendance(List<DingdingDailyStatistics> dingdingDailyStatistics, Workbook wb) {
+    private Workbook generatorXmonthCheckWorkAttendance(List<DingdingDailyStatistics> dingdingDailyStatistics,
+                                                        List<DingdingMonthlyStatistics> dingdingMonthlyStatistics, Workbook wb) {
         if (null == wb || CollectionUtils.isEmpty(dingdingDailyStatistics)) {
             return wb;
         }
         Sheet sheet = wb.createSheet(getMonthStr() + "月考勤表统计");
         Drawing draw = sheet.createDrawingPatriarch();
         // 设置列宽
-        sheet.setColumnWidth(0, 5 * 256);
-        sheet.setColumnWidth(1, 14 * 256);
-        sheet.setColumnWidth(2, 5 * 256);
-        sheet.setColumnWidth(3, 8 * 256);
-        sheet.setColumnWidth(4, 6 * 256);
-        sheet.setColumnWidth(5, 6 * 256);
-        sheet.setColumnWidth(6, 6 * 256);
-        sheet.setColumnWidth(7, 3 * 256);
-        sheet.setColumnWidth(8, 3 * 256);
-        sheet.setColumnWidth(9, 3 * 256);
-        sheet.setColumnWidth(10, 4 * 256);
-        sheet.setColumnWidth(11, 3 * 256);
-        sheet.setColumnWidth(12, 3 * 256);
-        sheet.setColumnWidth(13, 3 * 256);
-        sheet.setColumnWidth(14, 3 * 256);
-        sheet.setColumnWidth(15, 5 * 256);
-        for (int i = 0; i < 31; i++) {
-            sheet.setColumnWidth(16 + i, 3 * 256);
+        List<Integer> columnWidthList = Lists.newArrayList(5, 14, 5, 8, 6, 6, 6, 3, 3, 3, 4, 3, 3, 3, 3, 5, 3, 3, 3, 3, 3, 3, 3,
+                3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3);
+        for (int i = 0; i < columnWidthList.size(); i++) {
+            sheet.setColumnWidth(i, columnWidthList.get(i) * 256);
         }
 
         // 获取日期列表
@@ -290,57 +332,18 @@ public class AttendanceServiceImpl implements AttendanceService {
                 p -> p.substring(p.indexOf("星期")),
                 (l1, l2) -> l2));
         int row2cellIndex = 0;
-        Cell row2Cell0 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell0.setCellValue("序号");
-        row2Cell0.setCellStyle(titleCellStyle2);
-        Cell row2Cell1 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell1.setCellValue("姓名");
-        row2Cell1.setCellStyle(titleCellStyle2);
-        Cell row2Cell2 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell2.setCellValue("应出勤天数");
-        row2Cell2.setCellStyle(titleCellStyle2);
-        Cell row2Cell3 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell3.setCellValue("实际出勤天数");
-        row2Cell3.setCellStyle(titleCellStyle2);
-        Cell row2Cell4 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell4.setCellValue("缺勤");
-        row2Cell4.setCellStyle(titleCellStyle2);
-        Cell row2Cell5 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell5.setCellValue("平时加班天数");
-        row2Cell5.setCellStyle(titleCellStyle2);
-        Cell row2Cell6 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell6.setCellValue("事假天数");
-        row2Cell6.setCellStyle(titleCellStyle2);
-        Cell row2Cell7 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell7.setCellValue("产假天数");
-        row2Cell7.setCellStyle(titleCellStyle2);
-        Cell row2Cell8 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell8.setCellValue("丧假天数");
-        row2Cell8.setCellStyle(titleCellStyle2);
-        Cell row2Cell9 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell9.setCellValue("婚假天数");
-        row2Cell9.setCellStyle(titleCellStyle2);
-        Cell row2Cell10 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell10.setCellValue("病假天数");
-        row2Cell10.setCellStyle(titleCellStyle2);
-        Cell row2Cell11 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell11.setCellValue("迟到早退次数");
-        row2Cell11.setCellStyle(titleCellStyle2);
-        Cell row2Cell12 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell12.setCellValue("漏打卡次数");
-        row2Cell12.setCellStyle(titleCellStyle2);
-        Cell row2Cell13 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell13.setCellValue("大夜班补贴");
-        row2Cell13.setCellStyle(titleCellStyle2);
-        Cell row2Cell14 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell14.setCellValue("加班补贴");
-        row2Cell14.setCellStyle(titleCellStyle2);
-        Cell row2Cell15 = row2.createCell(row2cellIndex++, CellType.STRING);
-        row2Cell15.setCellValue("日期时间");
-        row2Cell15.setCellStyle(titleCellStyle2);
+        List<String> titleNameList = Lists.newArrayList("序号", "姓名", "应出勤天数", "实际出勤天数", "缺勤", "平时加班天数",
+                "事假天数", "产假天数", "丧假天数", "婚假天数", "病假天数", "迟到早退次数", "漏打卡次数", "大夜班补贴", "加班补贴", "日期时间");
+        for (int i = 0; i < titleNameList.size(); i++) {
+            Cell row2Celln = row2.createCell(row2cellIndex++, CellType.STRING);
+            row2Celln.setCellValue(titleNameList.get(i));
+            row2Celln.setCellStyle(titleCellStyle2);
+        }
         List<String> list = datatimeStrMap.keySet().stream().sorted(Comparator.comparing(Integer::valueOf)).collect(Collectors.toList());
         for (String key : list) {
-            row2.createCell(row2cellIndex++, CellType.STRING).setCellValue(key);
+            Cell cell = row2.createCell(row2cellIndex++, CellType.STRING);
+            cell.setCellValue(key);
+            cell.setCellStyle(titleCellStyle2);
         }
         // 合并单元格
         for (int i = 0; i < 16; i++) {
@@ -358,11 +361,29 @@ public class AttendanceServiceImpl implements AttendanceService {
             row3Celln.setCellValue(datatimeStrMap.get(key));
             row3Celln.setCellStyle(titleCellStyle2);
         }
+        // 将每月统计数据按照userId来分组
+        Map<String, DingdingMonthlyStatistics> monthlyStatisticsMap = dingdingMonthlyStatistics.stream()
+                .collect(Collectors.toMap(m -> m.getUserId(), m -> m, (m1, m2) -> m2));
+
+        // 黄色背景时间样式
+        CellStyle yellowCellStyle = wb.createCellStyle();
+        yellowCellStyle.cloneStyleFrom(titleCellStyle2);
+        yellowCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        yellowCellStyle.setFillForegroundColor(HSSFColor.YELLOW.index);
+        // 未正确实现的单元格，需要手工处理
+        CellStyle todoCellStyle = wb.createCellStyle();
+        todoCellStyle.cloneStyleFrom(titleCellStyle2);
+        todoCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        todoCellStyle.setFillForegroundColor(HSSFColor.RED.index);
 
         // 开始填充数据
         for (int i = 0; i < dingdingDailyStatistics.size(); i++) {
             DingdingDailyStatistics statistics = dingdingDailyStatistics.get(i);
             String userId = statistics.getUserId();
+            DingdingMonthlyStatistics monthlyStatistics = monthlyStatisticsMap.get(userId);
+            if (null == monthlyStatistics) {
+                monthlyStatistics = new DingdingMonthlyStatistics();
+            }
             // 去掉王金玉和王和玉
             if (userId.equals("066937470829612195") || userId.equals("manager3394")) {
                 continue;
@@ -372,74 +393,19 @@ public class AttendanceServiceImpl implements AttendanceService {
             int rown1cellIndex = 0;
             Row rown2 = sheet.createRow(rowIndex++);
             int rown2cellIndex = 0;
-            /**
-             * 设置第一行的内容
-             */
-            // 第0列序号
-            Cell rown1Cell1 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell1.setCellValue(i + 1);
-            rown1Cell1.setCellStyle(titleCellStyle2);
-            // 第1列姓名
-            Cell rown1Cell2 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell2.setCellValue(statistics.getName());
-            rown1Cell2.setCellStyle(titleCellStyle2);
-            // TODO 第2列应出勤天数
-            Cell rown1Cell3 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell3.setCellValue("");
-            rown1Cell3.setCellStyle(titleCellStyle2);
-            // TODO 第3列实际出勤天数
-            Cell rown1Cell4 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell4.setCellValue("");
-            rown1Cell4.setCellStyle(titleCellStyle2);
-            // TODO 第4列缺勤
-            Cell rown1Cell5 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell5.setCellValue("");
-            rown1Cell5.setCellStyle(titleCellStyle2);
-            // TODO 第5列平时加班天数
-            Cell rown1Cell6 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell6.setCellValue("");
-            rown1Cell6.setCellStyle(titleCellStyle2);
-            // TODO 第6列事假天数
-            Cell rown1Cell7 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell7.setCellValue("");
-            rown1Cell7.setCellStyle(titleCellStyle2);
-            // TODO 第7列产假天数
-            Cell rown1Cell8 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell8.setCellValue("");
-            rown1Cell8.setCellStyle(titleCellStyle2);
-            // TODO 第8列丧假天数
-            Cell rown1Cell9 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell9.setCellValue("");
-            rown1Cell9.setCellStyle(titleCellStyle2);
-            // TODO 第9列婚假天数
-            Cell rown1Cell10 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell10.setCellValue("");
-            rown1Cell10.setCellStyle(titleCellStyle2);
-            // TODO 第10列病假天数
-            Cell rown1Cell11 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell11.setCellValue("");
-            rown1Cell11.setCellStyle(titleCellStyle2);
-            // TODO 第11列迟到早退次数
-            Cell rown1Cell12 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell12.setCellValue("");
-            rown1Cell12.setCellStyle(titleCellStyle2);
-            // TODO 第12列漏打卡次数
-            Cell rown1Cell13 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell13.setCellValue("");
-            rown1Cell13.setCellStyle(titleCellStyle2);
-            // TODO 第13列大夜班补贴
-            Cell rown1Cell14 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell14.setCellValue("");
-            rown1Cell14.setCellStyle(titleCellStyle2);
-            // TODO 第14列加班补贴
-            Cell rown1Cell15 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell15.setCellValue("");
-            rown1Cell15.setCellStyle(titleCellStyle2);
-            // 第15列日期时间
-            Cell rown1Cell16 = rown1.createCell(rown1cellIndex++, CellType.STRING);
-            rown1Cell16.setCellValue("");
-            rown1Cell16.setCellStyle(titleCellStyle2);
 
+            /**
+             * 设置合并两行的，前0-15列的信息
+             */
+            List<String> dayContentList = Lists.newArrayList(String.valueOf(i + 1), statistics.getName(), "TODO第2列应出勤天数",
+                    monthlyStatistics.getChuqinTianshu(), "TODO第4列缺勤", "TODO第5列平时加班天数", "TODO第6列事假天数", "TODO第7列产假天数",
+                    "TODO第8列丧假天数", "TODO第9列婚假天数", "TODO第10列病假天数", "TODO第11列迟到早退次数",
+                    "TODO第12列漏打卡次数", "TODO第13列大夜班补贴", "TODO第14列加班补贴", "");
+            for (String day : dayContentList) {
+                Cell rown1Cell = rown1.createCell(rown1cellIndex++, CellType.STRING);
+                rown1Cell.setCellValue(day);
+                rown1Cell.setCellStyle(titleCellStyle2);
+            }
             // 合并某些单元格的第一行第二行
             for (int j = 0; j < 16; j++) {
                 rown2.createCell(rown2cellIndex++, CellType.STRING).setCellValue("");
@@ -447,22 +413,180 @@ public class AttendanceServiceImpl implements AttendanceService {
                 sheet.addMergedRegion(regionN12);
             }
 
-            // 开始设置第一行跟第二行的打卡时间
+            /**
+             * 开始设置第一行跟第二行的打卡时间
+             * 上班"√"
+             * 大夜班"√"
+             * 加班"√"
+             * 休息"●" 【黄色背景标志】
+             * 事假"×"
+             * 病假"△"
+             * 旷工"○"
+             * 迟到"★"【加批注】
+             * 早退"▲"
+             * 漏打卡"⊙"
+             * 婚嫁"+"丧假"±"离职"＃"
+             * 工伤生育假"※"
+             */
             List<DingdingPunchInRecord> punchInRecords1 = statistics.getPunchInRecords();
             if (CollectionUtils.isNotEmpty(punchInRecords1)) {
-                String dateTimeStr1 = "";
-                String dateTimeStr2 = "";
-                for (DingdingPunchInRecord record : punchInRecords1) {
+                // 开始遍历打卡记录
+                for (int j = 1; j <= punchInRecords1.size(); j++) {
+                    Map<Integer, String> everydaySummary = monthlyStatistics.getEverydaySummary();
+                    everydaySummary = (null != everydaySummary && !everydaySummary.isEmpty()) ? everydaySummary : new HashMap<>();
+                    String jSummary = everydaySummary.get(j);
                     Cell rown1Cell = rown1.createCell(rown1cellIndex++, CellType.STRING);
                     Cell rown2Cell = rown2.createCell(rown2cellIndex++, CellType.STRING);
-
-                    CellStyle cellStyle1 = wb.createCellStyle();
-                    cellStyle1.cloneStyleFrom(titleCellStyle2);
-                    dateTimeStr1 = setRown1Cell(dateTimeStr1, rown1Cell, record, cellStyle1, draw, rowIndex - 2, rown1cellIndex - 1);
-
-                    CellStyle cellStyle2 = wb.createCellStyle();
-                    cellStyle2.cloneStyleFrom(titleCellStyle2);
-                    setRown2Cell(dateTimeStr2, rown2Cell, record, cellStyle2, draw);
+                    // 没有打卡记录说明【未入职、离职】
+                    if (StringUtils.isEmpty(jSummary) || jSummary.equals("不在考勤组并打卡")) {
+                        // 判断前一列，如果不为null，则该单元格置为#号 或者当前格是第16列，则也置为#号
+                        if (rown1cellIndex == 17) {
+                            rown1Cell.setCellValue("#");
+                            rown1Cell.setCellStyle(titleCellStyle2);
+                            rown2Cell.setCellValue("#");
+                            rown2Cell.setCellStyle(titleCellStyle2);
+                        } else {
+                            Cell cell1n = rown1.getCell(rown1cellIndex - 1);
+                            if (StringUtils.isEmpty(cell1n.getStringCellValue())) {
+                                rown1Cell.setCellValue("#");
+                                rown1Cell.setCellStyle(titleCellStyle2);
+                            }
+                            Cell cell2n = rown2.getCell(rown1cellIndex - 1);
+                            if (StringUtils.isEmpty(cell2n.getStringCellValue())) {
+                                rown2Cell.setCellValue("#");
+                                rown2Cell.setCellStyle(titleCellStyle2);
+                            }
+                        }
+                    }
+                    // 表示有打卡记录内容的
+                    else {
+                        // 月打卡统计提示该天正常
+                        if (jSummary.equals("正常")) {
+                            // 则上午下午打卡都正常
+                            rown1Cell.setCellValue("√");
+                            rown1Cell.setCellStyle(titleCellStyle2);
+                            rown2Cell.setCellValue("√");
+                            rown2Cell.setCellStyle(titleCellStyle2);
+                        }
+                        // 月打卡改天休息或者旷工
+                        else if (jSummary.equals("休息") || jSummary.equals("旷工")) {
+                            // 则上午下午都休息
+                            rown1Cell.setCellValue("●");
+                            rown1Cell.setCellStyle(yellowCellStyle);
+                            rown2Cell.setCellValue("●");
+                            rown2Cell.setCellStyle(yellowCellStyle);
+                        }
+                        // 月打卡该天上班迟到几分钟
+                        else if (jSummary.indexOf("上班迟到") > -1) {
+                            // 则上午迟到几分钟，下午正常
+                            rown1Cell.setCellValue("★");
+                            rown1Cell.setCellStyle(titleCellStyle2);
+                            // 批注
+                            Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                    rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
+                            XSSFRichTextString rtf = new XSSFRichTextString(jSummary.replace("上班", ""));
+                            comment.setString(rtf);
+                            rown1Cell.setCellComment(comment);
+                            rown2Cell.setCellValue("√");
+                            rown2Cell.setCellStyle(titleCellStyle2);
+                        }
+                        // 月打卡-上班缺卡
+                        else if (jSummary.equals("上班缺卡")) {
+                            // 则上午补卡下午打卡正常
+                            rown1Cell.setCellValue("⊙");
+                            rown1Cell.setCellStyle(titleCellStyle2);
+                            rown2Cell.setCellValue("√");
+                            rown2Cell.setCellStyle(titleCellStyle2);
+                        }
+                        // 月打卡-下班缺卡
+                        else if (jSummary.equals("下班缺卡")) {
+                            // 则下午补卡上午打卡正常
+                            rown1Cell.setCellValue("√");
+                            rown1Cell.setCellStyle(titleCellStyle2);
+                            rown2Cell.setCellValue("⊙");
+                            rown2Cell.setCellStyle(titleCellStyle2);
+                        }
+                        // 调休|事假|丧假
+                        else if (jSummary.startsWith("调休") || jSummary.startsWith("事假") || jSummary.startsWith("丧假")) {
+                            try {
+                                // 获取最后的调休时长
+                                String substring = jSummary.substring(jSummary.lastIndexOf(" ") + 1);
+                                if (substring.endsWith("小时")) {
+                                    String su = substring.substring(0, substring.length() - 2);
+                                    Integer suInteger = Integer.valueOf(su);
+                                    if (suInteger >= 8) {
+                                        // 则上午下午都休息
+                                        rown1Cell.setCellValue("●");
+                                        rown1Cell.setCellStyle(yellowCellStyle);
+                                        rown2Cell.setCellValue("●");
+                                        rown2Cell.setCellStyle(yellowCellStyle);
+                                        if (jSummary.startsWith("丧假")) {
+                                            // 批注
+                                            Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                                    rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
+                                            XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
+                                            comment.setString(rtf);
+                                            rown1Cell.setCellComment(comment);
+                                            rown2Cell.setCellComment(comment);
+                                        }
+                                    }
+                                } else if (substring.endsWith("天")) {
+                                    String su = substring.substring(0, substring.length() - 1);
+                                    Integer suInteger = Integer.valueOf(su);
+                                    if (suInteger >= 1) {
+                                        // 则上午下午都休息
+                                        rown1Cell.setCellValue("●");
+                                        rown1Cell.setCellStyle(yellowCellStyle);
+                                        rown2Cell.setCellValue("●");
+                                        rown2Cell.setCellStyle(yellowCellStyle);
+                                        if (jSummary.startsWith("丧假")) {
+                                            // 批注
+                                            Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                                    rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
+                                            XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
+                                            comment.setString(rtf);
+                                            rown1Cell.setCellComment(comment);
+                                            rown2Cell.setCellComment(comment);
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                rown1Cell.setCellValue("");
+                                rown1Cell.setCellStyle(todoCellStyle);
+                                rown2Cell.setCellValue("");
+                                rown2Cell.setCellStyle(todoCellStyle);
+                                // 批注
+                                Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                        rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
+                                XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
+                                comment.setString(rtf);
+                                rown1Cell.setCellComment(comment);
+                                // 批注
+                                Comment comment1 = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                        rown1cellIndex - 1, rowIndex - 1, rown1cellIndex - 1, rowIndex - 1));
+                                XSSFRichTextString rtf1 = new XSSFRichTextString(jSummary);
+                                comment1.setString(rtf1);
+                                rown2Cell.setCellComment(comment1);
+                            }
+                        } else {
+                            rown1Cell.setCellValue("");
+                            rown1Cell.setCellStyle(todoCellStyle);
+                            rown2Cell.setCellValue("");
+                            rown2Cell.setCellStyle(todoCellStyle);
+                            // 批注
+                            Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                    rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
+                            XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
+                            comment.setString(rtf);
+                            rown1Cell.setCellComment(comment);
+                            // 批注
+                            Comment comment1 = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                    rown1cellIndex - 1, rowIndex - 1, rown1cellIndex - 1, rowIndex - 1));
+                            XSSFRichTextString rtf1 = new XSSFRichTextString(jSummary);
+                            comment1.setString(rtf1);
+                            rown2Cell.setCellComment(comment1);
+                        }
+                    }
                 }
             }
         }
@@ -474,7 +598,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         rowLast.setHeightInPoints(13.5f);
         Cell rowLastcell0 = rowLast.createCell(0, CellType.STRING);
         rowLastcell0.setCellValue("上班\"√\"大夜班\"√\"加班\"√\"休息\"●\"事假\"×\"病假\"△\"旷工\"○\"迟到\"★\"早退\"▲\"漏打卡\"⊙\"婚嫁\"+\"丧假\"±\"离职\"＃\"工伤生育假\"※\"");
-        // 设置第一行标题的单元格格式
+        // 设置最后一行标题的单元格格式
         CellStyle titleCellStyleLast = wb.createCellStyle();
         titleCellStyleLast.setAlignment(HorizontalAlignment.CENTER);
         titleCellStyleLast.setVerticalAlignment(VerticalAlignment.CENTER);
