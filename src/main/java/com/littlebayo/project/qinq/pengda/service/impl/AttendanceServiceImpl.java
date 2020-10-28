@@ -25,7 +25,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * 考勤服务
@@ -51,8 +50,15 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 生成的考勤报表添加的文件名后缀
      */
     private static final String ATTENDANCE_REPORT_SUFFIX = "_qinq";
-
+    /**
+     * 每日统计表解析的标题
+     */
     private static String clockInTimeAndDate = "每日统计表 统计日期：2020-09-01 至 2020-09-30";
+    /**
+     * 员工大夜班补贴跟加班补贴次数
+     */
+    private Map<String, Integer> workOvertimeMap = new HashMap<>();
+    private Map<String, Integer> nightShiftMap = new HashMap<>();
 
     /**
      * 导入钉钉文件
@@ -87,12 +93,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         // -------开始分析并导出-------
         // 1. 创建工作簿对象
         Workbook wb = new SXSSFWorkbook(500);
+        wb.createSheet(getMonthStr() + "月考勤表统计");
+        wb.createSheet(getMonthStr() + "月打卡时间");
 
-        // 2. 生成x月考勤表统计【表一】
-        wb = generatorXmonthCheckWorkAttendance(dingdingDailyStatistics, dingdingMonthlyStatistics, wb);
-
-        // 3. 生成x月打卡时间【表二】
+        // 2. 生成x月打卡时间【表二】【因为生成表一的时候需要用到一些表二的数据，所以先生成表二】
         wb = generatorXmonthClockInTime(dingdingDailyStatistics, wb);
+
+        // 3. 生成x月考勤表统计【表一】
+        wb = generatorXmonthCheckWorkAttendance(dingdingDailyStatistics, dingdingMonthlyStatistics, wb);
 
         // 4. 输出工作表
         String fileName = fileRealName + ATTENDANCE_REPORT_SUFFIX + suffix;
@@ -254,7 +262,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (null == wb || CollectionUtils.isEmpty(dingdingDailyStatistics)) {
             return wb;
         }
-        Sheet sheet = wb.createSheet(getMonthStr() + "月考勤表统计");
+        Sheet sheet = wb.getSheet(getMonthStr() + "月考勤表统计");
         Drawing draw = sheet.createDrawingPatriarch();
         // 设置列宽
         List<Integer> columnWidthList = Lists.newArrayList(5, 14, 5, 8, 6, 6, 6, 3, 3, 3, 4, 3, 3, 3, 3, 5, 3, 3, 3, 3, 3, 3, 3,
@@ -374,7 +382,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         CellStyle todoCellStyle = wb.createCellStyle();
         todoCellStyle.cloneStyleFrom(titleCellStyle2);
         todoCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        todoCellStyle.setFillForegroundColor(HSSFColor.RED.index);
+        todoCellStyle.setFillForegroundColor(HSSFColor.ORANGE.index);
 
         // 开始填充数据
         for (int i = 0; i < dingdingDailyStatistics.size(); i++) {
@@ -397,20 +405,28 @@ public class AttendanceServiceImpl implements AttendanceService {
             /**
              * 设置合并两行的，前0-15列的信息
              */
-            List<String> dayContentList = Lists.newArrayList(String.valueOf(i + 1), statistics.getName(), "TODO第2列应出勤天数",
-                    monthlyStatistics.getChuqinTianshu(), "TODO第4列缺勤", "TODO第5列平时加班天数", "TODO第6列事假天数", "TODO第7列产假天数",
-                    "TODO第8列丧假天数", "TODO第9列婚假天数", "TODO第10列病假天数", "TODO第11列迟到早退次数",
-                    "TODO第12列漏打卡次数", "TODO第13列大夜班补贴", "TODO第14列加班补贴", "");
+            Integer workOvertimeCount = workOvertimeMap.get(userId);
+            Integer nightShiftCount = nightShiftMap.get(userId);
+            List<String> dayContentList = Lists.newArrayList(String.valueOf(i + 1), statistics.getName(), "",
+                    monthlyStatistics.getChuqinTianshu(), "", "", "", "", "", "", "", "", "",
+                    String.valueOf(null == nightShiftCount ? 0 : nightShiftCount), String.valueOf(null == workOvertimeCount ? 0 : workOvertimeCount), "");
             for (String day : dayContentList) {
                 Cell rown1Cell = rown1.createCell(rown1cellIndex++, CellType.STRING);
                 rown1Cell.setCellValue(day);
                 rown1Cell.setCellStyle(titleCellStyle2);
             }
+
             // 合并某些单元格的第一行第二行
             for (int j = 0; j < 16; j++) {
                 rown2.createCell(rown2cellIndex++, CellType.STRING).setCellValue("");
                 CellRangeAddress regionN12 = new CellRangeAddress(rowIndex - 2, rowIndex - 1, j, j);
                 sheet.addMergedRegion(regionN12);
+            }
+
+            // TODO未实现的单元格
+            for (Integer todo : Lists.newArrayList(2, 4, 5, 6, 7, 8, 9, 10, 11, 12)) {
+                rown1.getCell(todo).setCellStyle(todoCellStyle);
+                rown2.getCell(todo).setCellStyle(todoCellStyle);
             }
 
             /**
@@ -614,91 +630,6 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * TODO 设置某一天上班打卡的标记
-     * 上班"√"
-     * 大夜班"√"
-     * 加班"√"
-     * 休息"●" 【黄色背景标志】
-     * 事假"×"
-     * 病假"△"
-     * 旷工"○"
-     * 迟到"★"【加批注】
-     * 早退"▲"
-     * 漏打卡"⊙"
-     * 婚嫁"+"丧假"±"离职"＃"
-     * 工伤生育假"※"
-     *
-     * @param dateTimeStr
-     * @param rown1Cell
-     * @param record
-     * @param cellStyle
-     * @param draw
-     */
-    private String setRown1Cell(String dateTimeStr, Cell rown1Cell, DingdingPunchInRecord record, CellStyle cellStyle, Drawing draw, int rowIndex, int colIndex) {
-        if (StringUtils.isNotEmpty(dateTimeStr)) {
-            dateTimeStr = "#";
-        }
-        if (null != record) {
-            if (StringUtils.isNotEmpty(record.getGoToWorkClockoutResults1())) {
-                String tip = record.getGoToWorkClockoutResults1();
-                if (tip.equals("正常")) {
-                    dateTimeStr = "√";
-                } else if (tip.equals("缺卡") || tip.equals("请假")) {
-                    dateTimeStr = "●";
-                    cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-                    cellStyle.setFillForegroundColor(HSSFColor.YELLOW.index);
-                } else if (tip.equals("外出")) {
-                    dateTimeStr = "√";
-                    // 批注
-                    Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0, colIndex, rowIndex, colIndex, rowIndex));
-                    XSSFRichTextString rtf = new XSSFRichTextString("外出办事");
-                    comment.setString(rtf);
-                    rown1Cell.setCellComment(comment);
-                } else if (tip.indexOf("补卡") > -1) {
-                    dateTimeStr = "⊙";
-                } else if (tip.indexOf("迟到") > -1) {
-                    dateTimeStr = "★";
-                    // 批注
-                    Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0, colIndex, rowIndex, colIndex, rowIndex));
-                    XSSFRichTextString rtf = new XSSFRichTextString(tip);
-                    comment.setString(rtf);
-                    rown1Cell.setCellComment(comment);
-                }
-            }
-        } else {
-            dateTimeStr = "";
-        }
-        rown1Cell.setCellValue(dateTimeStr);
-        rown1Cell.setCellStyle(cellStyle);
-        return dateTimeStr;
-    }
-
-    /**
-     * TODO 设置某一天下班打卡的标记
-     * 上班"√"
-     * 大夜班"√"
-     * 加班"√"
-     * 休息"●" 【黄色背景标志】
-     * 事假"×"
-     * 病假"△"
-     * 旷工"○"
-     * 迟到"★"【加批注】
-     * 早退"▲"
-     * 漏打卡"⊙"
-     * 婚嫁"+"丧假"±"离职"＃"
-     * 工伤生育假"※"
-     *
-     * @param dateTimeStr
-     * @param rown2Cell
-     * @param record
-     * @param cellStyle
-     * @param draw
-     */
-    private void setRown2Cell(String dateTimeStr, Cell rown2Cell, DingdingPunchInRecord record, CellStyle cellStyle, Drawing draw) {
-
-    }
-
-    /**
      * 生成x月打卡时间【表二】
      *
      * @param dingdingDailyStatistics 用户的打卡记录
@@ -711,7 +642,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         // 创建工作表
-        Sheet sheet = wb.createSheet(getMonthStr() + "月打卡时间");
+        Sheet sheet = wb.getSheet(getMonthStr() + "月打卡时间");
         // 获取日期列表【就按照第一个员工的打卡记录来即可】
         List<DingdingPunchInRecord> punchInRecords = dingdingDailyStatistics.get(0).getPunchInRecords();
         // 行标【表格内容从第0行开始写】
@@ -881,6 +812,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         blueContentCellStyle.setBorderRight(BorderStyle.THIN);
         // 开始遍历员工打卡记录
         for (DingdingDailyStatistics data : dingdingDailyStatistics) {
+            String userId = data.getUserId();
+            // 加班次数
+            int workOvertimeCount = 0;
+            // 大夜班次数
+            int nightShiftCount = 0;
+
             // 一个员工创建一行打卡记录数据
             Row rowF = sheet.createRow(rowIndex++);
             // 设置行高
@@ -937,14 +874,21 @@ public class AttendanceServiceImpl implements AttendanceService {
                     rowFcelli.setCellStyle(noColorContentCellStyle);
                     if (getOvertimeMarking(record.getGoOffWorkClockInTime1(), record.getGoToWorkClockInTime2(), record.getGoOffWorkClockInTime2())) {
                         rowFcelli.setCellStyle(redContentCellStyle);
+                        workOvertimeCount++;
                     }
                     if (data.getAttendanceContent().equals("客服")) {
                         if (getNightShiftSign(record.getGoOffWorkClockInTime1(), record.getGoToWorkClockInTime2(), record.getGoOffWorkClockInTime2())) {
                             rowFcelli.setCellStyle(blueContentCellStyle);
+                            nightShiftCount++;
                         }
                     }
                 }
             }
+
+            // 加班次数
+            workOvertimeMap.put(userId, workOvertimeCount);
+            // 大夜班次数
+            nightShiftMap.put(userId, nightShiftCount);
         }
 
         return wb;
