@@ -445,6 +445,7 @@ public class AttendanceServiceImpl implements AttendanceService {
              * 工伤生育假"※"
              */
             List<DingdingPunchInRecord> punchInRecords1 = statistics.getPunchInRecords();
+            int chidaoZaotui = 0, loudakaCishu = 0, sangjiaTianshu = 0;
             if (CollectionUtils.isNotEmpty(punchInRecords1)) {
                 // 开始遍历打卡记录
                 for (int j = 1; j <= punchInRecords1.size(); j++) {
@@ -455,23 +456,16 @@ public class AttendanceServiceImpl implements AttendanceService {
                     Cell rown2Cell = rown2.createCell(rown2cellIndex++, CellType.STRING);
                     // 没有打卡记录说明【未入职、离职】
                     if (StringUtils.isEmpty(jSummary) || jSummary.equals("不在考勤组并打卡")) {
-                        // 判断前一列，如果不为null，则该单元格置为#号 或者当前格是第16列，则也置为#号
-                        if (rown1cellIndex == 17) {
+                        // 判断前一列，如果不为null，则该单元格置为#号
+                        Cell cell1n = rown1.getCell(rown1cellIndex - 2);
+                        if (StringUtils.isNotEmpty(cell1n.getStringCellValue())) {
                             rown1Cell.setCellValue("#");
                             rown1Cell.setCellStyle(titleCellStyle2);
+                        }
+                        Cell cell2n = rown2.getCell(rown1cellIndex - 2);
+                        if (StringUtils.isNotEmpty(cell2n.getStringCellValue())) {
                             rown2Cell.setCellValue("#");
                             rown2Cell.setCellStyle(titleCellStyle2);
-                        } else {
-                            Cell cell1n = rown1.getCell(rown1cellIndex - 1);
-                            if (StringUtils.isEmpty(cell1n.getStringCellValue())) {
-                                rown1Cell.setCellValue("#");
-                                rown1Cell.setCellStyle(titleCellStyle2);
-                            }
-                            Cell cell2n = rown2.getCell(rown1cellIndex - 1);
-                            if (StringUtils.isEmpty(cell2n.getStringCellValue())) {
-                                rown2Cell.setCellValue("#");
-                                rown2Cell.setCellStyle(titleCellStyle2);
-                            }
                         }
                     }
                     // 表示有打卡记录内容的
@@ -505,6 +499,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown1Cell.setCellComment(comment);
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
+                            chidaoZaotui++;
                         }
                         // 月打卡-上班缺卡
                         else if (jSummary.equals("上班缺卡")) {
@@ -513,6 +508,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown1Cell.setCellStyle(titleCellStyle2);
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
+                            loudakaCishu++;
                         }
                         // 月打卡-下班缺卡
                         else if (jSummary.equals("下班缺卡")) {
@@ -521,6 +517,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown1Cell.setCellStyle(titleCellStyle2);
                             rown2Cell.setCellValue("⊙");
                             rown2Cell.setCellStyle(titleCellStyle2);
+                            loudakaCishu++;
                         }
                         // 调休|事假|丧假
                         else if (jSummary.startsWith("调休") || jSummary.startsWith("事假") || jSummary.startsWith("丧假")) {
@@ -544,6 +541,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                             comment.setString(rtf);
                                             rown1Cell.setCellComment(comment);
                                             rown2Cell.setCellComment(comment);
+                                            sangjiaTianshu++;
                                         }
                                     }
                                 } else if (substring.endsWith("天")) {
@@ -563,6 +561,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                             comment.setString(rtf);
                                             rown1Cell.setCellComment(comment);
                                             rown2Cell.setCellComment(comment);
+                                            sangjiaTianshu++;
                                         }
                                     }
                                 }
@@ -604,6 +603,17 @@ public class AttendanceServiceImpl implements AttendanceService {
                         }
                     }
                 }
+            }
+
+            // 补充迟到早退次数跟漏打卡次数、丧假、事假、病假
+            if (chidaoZaotui > 0) {
+                rown1.getCell(11).setCellValue(chidaoZaotui);
+            }
+            if (loudakaCishu > 0) {
+                rown1.getCell(12).setCellValue(loudakaCishu);
+            }
+            if (sangjiaTianshu > 0) {
+                rown1.getCell(8).setCellValue(sangjiaTianshu);
             }
         }
 
