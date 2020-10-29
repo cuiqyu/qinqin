@@ -9,6 +9,7 @@ import com.littlebayo.project.qinq.pengda.domain.DingdingDailyStatistics;
 import com.littlebayo.project.qinq.pengda.domain.DingdingMonthlyStatistics;
 import com.littlebayo.project.qinq.pengda.domain.DingdingPunchInRecord;
 import com.littlebayo.project.qinq.pengda.service.AttendanceService;
+import com.littlebayo.project.qinq.utils.ParseDingDingAttendanceExcelUtil;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.poi.hssf.util.HSSFColor;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
@@ -86,7 +87,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         // 获取文件的真实名称，去除文件后缀的
         String fileRealName = filename.substring(0, filename.lastIndexOf("."));
         // 开始解析第一个表格文件
-        List<DingdingMonthlyStatistics> dingdingMonthlyStatistics = parseDingdingExcelMonthlyStatisticsData(file.getInputStream());
+        List<DingdingMonthlyStatistics> dingdingMonthlyStatistics = ParseDingDingAttendanceExcelUtil.parseDingdingExcelMonthlyStatisticsData(
+                file.getInputStream(), ATTENDANCE_MONTHLYSTATISTICSDATA_NAME);
         // 开始解析第二个表格文件
         List<DingdingDailyStatistics> dingdingDailyStatistics = parseDingdingExcelDailyStatisticsData(file.getInputStream());
 
@@ -107,57 +109,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         OutputStream out = new FileOutputStream(getAbsoluteFile(fileName));
         wb.write(out);
         return AjaxResult.success(fileName);
-    }
-
-    /**
-     * 解析钉钉考勤报表每月统计（第一张表格）
-     *
-     * @param inputStream 文件输入流
-     * @return
-     */
-    private List<DingdingMonthlyStatistics> parseDingdingExcelMonthlyStatisticsData(InputStream inputStream) throws IOException, InvalidFormatException {
-        // 工作簿对象
-        Workbook wb = WorkbookFactory.create(inputStream);
-        // 获取【月度汇总】表格
-        Sheet sheet = wb.getSheet(ATTENDANCE_MONTHLYSTATISTICSDATA_NAME);
-        if (null == sheet) {
-            logger.error("解析钉钉考勤报表失败，未找到报表文件中的[月度汇总]表格");
-            throw new BusinessException("未找到报表文件中的[月度汇总]表格");
-        }
-
-        // 月度汇总数据内容
-        List<DingdingMonthlyStatistics> dataList = new ArrayList<>();
-        // 获取总行数
-        int rows = sheet.getPhysicalNumberOfRows();
-        if (rows <= 4) {
-            return dataList;
-        }
-
-        // 开始统计的行数 从第五行开始统计
-        for (int i = 4; i < rows; i++) {
-            Row row = sheet.getRow(i);
-            int j = 0;
-            DingdingMonthlyStatistics monthlyStatistics = new DingdingMonthlyStatistics(
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)),
-                    getCellStringValue(row.getCell(j++)), getCellStringValue(row.getCell(j++)), null
-            );
-
-            HashMap<Integer, String> hashMap = new HashMap<>();
-            // 假设每个月按照最大的天数 31天来算
-            for (int m = 1; m <= 31; m++) {
-                hashMap.put(m, getCellStringValue(row.getCell(j++)));
-            }
-            monthlyStatistics.setEverydaySummary(hashMap);
-            dataList.add(monthlyStatistics);
-        }
-
-        return dataList;
     }
 
     /**
@@ -183,7 +134,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             return dataList;
         }
         // 读取每日统计的打卡时间日期
-        clockInTimeAndDate = getCellStringValue(sheet.getRow(0).getCell(0));
+        clockInTimeAndDate = ParseDingDingAttendanceExcelUtil.getCellStringValue(sheet.getRow(0).getCell(0));
 
         // 打卡时间记录
         List<DingdingPunchInRecord> punchInRecords = new ArrayList<>(2000);
@@ -193,19 +144,19 @@ public class AttendanceServiceImpl implements AttendanceService {
         // 开始统计的行数 从第五行开始统计
         for (int i = 4; i < rows; i++) {
             Row row = sheet.getRow(i);
-            String userId = getCellStringValue(row.getCell(5));
+            String userId = ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(5));
             if (!userIdSet.contains(userId)) {
                 DingdingDailyStatistics dd = new DingdingDailyStatistics();
                 // 姓名
-                dd.setName(getCellStringValue(row.getCell(0)));
+                dd.setName(ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(0)));
                 // 考勤组
-                dd.setAttendanceContent(getCellStringValue(row.getCell(1)));
+                dd.setAttendanceContent(ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(1)));
                 // 部门名称
-                dd.setDeptName(getCellStringValue(row.getCell(2)));
+                dd.setDeptName(ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(2)));
                 // 工号
-                dd.setJobNumber(getCellStringValue(row.getCell(3)));
+                dd.setJobNumber(ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(3)));
                 // 职位
-                dd.setJobName(getCellStringValue(row.getCell(4)));
+                dd.setJobName(ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(4)));
                 // userId
                 dd.setUserId(userId);
                 // 添加到解析结果中
@@ -215,17 +166,17 @@ public class AttendanceServiceImpl implements AttendanceService {
 
             DingdingPunchInRecord record = new DingdingPunchInRecord(
                     userId,
-                    getCellStringValue(row.getCell(6)),
-                    getCellStringValue(row.getCell(7)),
-                    getCellStringValue(row.getCell(8)),
-                    getCellStringValue(row.getCell(9)),
-                    getCellStringValue(row.getCell(10)),
-                    getCellStringValue(row.getCell(11)),
-                    getCellStringValue(row.getCell(12)),
-                    getCellStringValue(row.getCell(13)),
-                    getCellStringValue(row.getCell(14)),
-                    getCellStringValue(row.getCell(15)),
-                    getCellStringValue(row.getCell(16))
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(6)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(7)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(8)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(9)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(10)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(11)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(12)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(13)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(14)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(15)),
+                    ParseDingDingAttendanceExcelUtil.getCellStringValue(row.getCell(16))
             );
             punchInRecords.add(record);
         }
@@ -353,17 +304,21 @@ public class AttendanceServiceImpl implements AttendanceService {
             cell.setCellValue(key);
             cell.setCellStyle(titleCellStyle2);
         }
-        // 合并单元格
-        for (int i = 0; i < 16; i++) {
-            CellRangeAddress regionN = new CellRangeAddress(2, 3, i, i);
-            sheet.addMergedRegion(regionN);
-        }
         /**
          * 设置第四行内容
          */
         Row row3 = sheet.createRow(rowIndex++);
         row3.setHeightInPoints(49.5f);
         int row3cellIndex = 16;
+        // 合并单元格
+        for (int i = 0; i < 16; i++) {
+            Cell cell = row3.createCell(i, CellType.STRING);
+            cell.setCellValue("");
+            cell.setCellStyle(titleCellStyle2);
+            CellRangeAddress regionN = new CellRangeAddress(2, 3, i, i);
+            sheet.addMergedRegion(regionN);
+        }
+
         for (String key : list) {
             Cell row3Celln = row3.createCell(row3cellIndex++, CellType.STRING);
             row3Celln.setCellValue(datatimeStrMap.get(key));
@@ -418,7 +373,9 @@ public class AttendanceServiceImpl implements AttendanceService {
 
             // 合并某些单元格的第一行第二行
             for (int j = 0; j < 16; j++) {
-                rown2.createCell(rown2cellIndex++, CellType.STRING).setCellValue("");
+                Cell cell = rown2.createCell(rown2cellIndex++, CellType.STRING);
+                cell.setCellValue("");
+                cell.setCellStyle(titleCellStyle2);
                 CellRangeAddress regionN12 = new CellRangeAddress(rowIndex - 2, rowIndex - 1, j, j);
                 sheet.addMergedRegion(regionN12);
             }
@@ -458,14 +415,17 @@ public class AttendanceServiceImpl implements AttendanceService {
                     if (StringUtils.isEmpty(jSummary) || jSummary.equals("不在考勤组并打卡")) {
                         // 判断前一列，如果不为null，则该单元格置为#号
                         Cell cell1n = rown1.getCell(rown1cellIndex - 2);
+                        Cell cell2n = rown2.getCell(rown1cellIndex - 2);
+                        rown1Cell.setCellValue("");
+                        rown1Cell.setCellStyle(titleCellStyle2);
+                        rown2Cell.setCellValue("");
+                        rown2Cell.setCellStyle(titleCellStyle2);
+
                         if (StringUtils.isNotEmpty(cell1n.getStringCellValue())) {
                             rown1Cell.setCellValue("#");
-                            rown1Cell.setCellStyle(titleCellStyle2);
                         }
-                        Cell cell2n = rown2.getCell(rown1cellIndex - 2);
                         if (StringUtils.isNotEmpty(cell2n.getStringCellValue())) {
                             rown2Cell.setCellValue("#");
-                            rown2Cell.setCellStyle(titleCellStyle2);
                         }
                     }
                     // 表示有打卡记录内容的
@@ -477,6 +437,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown1Cell.setCellStyle(titleCellStyle2);
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
+                            continue;
                         }
                         // 月打卡改天休息或者旷工
                         else if (jSummary.equals("休息") || jSummary.equals("旷工")) {
@@ -485,6 +446,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown1Cell.setCellStyle(yellowCellStyle);
                             rown2Cell.setCellValue("●");
                             rown2Cell.setCellStyle(yellowCellStyle);
+                            continue;
                         }
                         // 月打卡该天上班迟到几分钟
                         else if (jSummary.indexOf("上班迟到") > -1) {
@@ -500,6 +462,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
                             chidaoZaotui++;
+                            continue;
                         }
                         // 月打卡-上班缺卡
                         else if (jSummary.equals("上班缺卡")) {
@@ -509,6 +472,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
                             loudakaCishu++;
+                            continue;
                         }
                         // 月打卡-下班缺卡
                         else if (jSummary.equals("下班缺卡")) {
@@ -518,16 +482,17 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown2Cell.setCellValue("⊙");
                             rown2Cell.setCellStyle(titleCellStyle2);
                             loudakaCishu++;
+                            continue;
                         }
                         // 调休|事假|丧假
                         else if (jSummary.startsWith("调休") || jSummary.startsWith("事假") || jSummary.startsWith("丧假")) {
                             try {
                                 // 获取最后的调休时长
                                 String substring = jSummary.substring(jSummary.lastIndexOf(" ") + 1);
-                                if (substring.endsWith("小时")) {
-                                    String su = substring.substring(0, substring.length() - 2);
+                                if (substring.endsWith("小时") || substring.endsWith("天")) {
+                                    String su = substring.substring(0, substring.length() - (substring.endsWith("小时") ? 2 : 1));
                                     Integer suInteger = Integer.valueOf(su);
-                                    if (suInteger >= 8) {
+                                    if ((substring.endsWith("小时") && suInteger >= 8) || (substring.endsWith("天") && suInteger >= 1)) {
                                         // 则上午下午都休息
                                         rown1Cell.setCellValue("●");
                                         rown1Cell.setCellStyle(yellowCellStyle);
@@ -543,69 +508,33 @@ public class AttendanceServiceImpl implements AttendanceService {
                                             rown2Cell.setCellComment(comment);
                                             sangjiaTianshu++;
                                         }
-                                    }
-                                } else if (substring.endsWith("天")) {
-                                    String su = substring.substring(0, substring.length() - 1);
-                                    Integer suInteger = Integer.valueOf(su);
-                                    if (suInteger >= 1) {
-                                        // 则上午下午都休息
-                                        rown1Cell.setCellValue("●");
-                                        rown1Cell.setCellStyle(yellowCellStyle);
-                                        rown2Cell.setCellValue("●");
-                                        rown2Cell.setCellStyle(yellowCellStyle);
-                                        if (jSummary.startsWith("丧假")) {
-                                            // 批注
-                                            Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
-                                                    rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
-                                            XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
-                                            comment.setString(rtf);
-                                            rown1Cell.setCellComment(comment);
-                                            rown2Cell.setCellComment(comment);
-                                            sangjiaTianshu++;
-                                        }
+                                        continue;
                                     }
                                 }
                             } catch (Exception e) {
-                                rown1Cell.setCellValue("");
-                                rown1Cell.setCellStyle(todoCellStyle);
-                                rown2Cell.setCellValue("");
-                                rown2Cell.setCellStyle(todoCellStyle);
-                                // 批注
-                                Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
-                                        rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
-                                XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
-                                comment.setString(rtf);
-                                rown1Cell.setCellComment(comment);
-                                // 批注
-                                Comment comment1 = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
-                                        rown1cellIndex - 1, rowIndex - 1, rown1cellIndex - 1, rowIndex - 1));
-                                XSSFRichTextString rtf1 = new XSSFRichTextString(jSummary);
-                                comment1.setString(rtf1);
-                                rown2Cell.setCellComment(comment1);
                             }
-                        } else {
-                            rown1Cell.setCellValue("");
-                            rown1Cell.setCellStyle(todoCellStyle);
-                            rown2Cell.setCellValue("");
-                            rown2Cell.setCellStyle(todoCellStyle);
-                            // 批注
-                            Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
-                                    rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
-                            XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
-                            comment.setString(rtf);
-                            rown1Cell.setCellComment(comment);
-                            // 批注
-                            Comment comment1 = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
-                                    rown1cellIndex - 1, rowIndex - 1, rown1cellIndex - 1, rowIndex - 1));
-                            XSSFRichTextString rtf1 = new XSSFRichTextString(jSummary);
-                            comment1.setString(rtf1);
-                            rown2Cell.setCellComment(comment1);
                         }
+                        rown1Cell.setCellValue("");
+                        rown1Cell.setCellStyle(todoCellStyle);
+                        rown2Cell.setCellValue("");
+                        rown2Cell.setCellStyle(todoCellStyle);
+                        // 批注
+                        Comment comment = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                rown1cellIndex - 1, rowIndex - 2, rown1cellIndex - 1, rowIndex - 2));
+                        XSSFRichTextString rtf = new XSSFRichTextString(jSummary);
+                        comment.setString(rtf);
+                        rown1Cell.setCellComment(comment);
+                        // 批注
+                        Comment comment1 = draw.createCellComment(new XSSFClientAnchor(0, 0, 0, 0,
+                                rown1cellIndex - 1, rowIndex - 1, rown1cellIndex - 1, rowIndex - 1));
+                        XSSFRichTextString rtf1 = new XSSFRichTextString(jSummary);
+                        comment1.setString(rtf1);
+                        rown2Cell.setCellComment(comment1);
                     }
                 }
             }
 
-            // 补充迟到早退次数跟漏打卡次数、丧假、事假、病假
+            // 补充迟到早退次数跟漏打卡次数、丧假
             if (chidaoZaotui > 0) {
                 rown1.getCell(11).setCellValue(chidaoZaotui);
             }
@@ -882,12 +811,12 @@ public class AttendanceServiceImpl implements AttendanceService {
                      * 4. 只有客服才有夜班
                      */
                     rowFcelli.setCellStyle(noColorContentCellStyle);
-                    if (getOvertimeMarking(record.getGoOffWorkClockInTime1(), record.getGoToWorkClockInTime2(), record.getGoOffWorkClockInTime2())) {
+                    if (getOvertimeMarking(record.getGoToWorkClockInTime1(), record.getGoOffWorkClockInTime1(), record.getGoToWorkClockInTime2(), record.getGoOffWorkClockInTime2())) {
                         rowFcelli.setCellStyle(redContentCellStyle);
                         workOvertimeCount++;
                     }
                     if (data.getAttendanceContent().equals("客服")) {
-                        if (getNightShiftSign(record.getGoOffWorkClockInTime1(), record.getGoToWorkClockInTime2(), record.getGoOffWorkClockInTime2())) {
+                        if (getNightShiftSign(record.getGoToWorkClockInTime1(), record.getGoOffWorkClockInTime1(), record.getGoToWorkClockInTime2(), record.getGoOffWorkClockInTime2())) {
                             rowFcelli.setCellStyle(blueContentCellStyle);
                             nightShiftCount++;
                         }
@@ -902,25 +831,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         return wb;
-    }
-
-    /**
-     * 获取excel单元格的字符串的内容
-     *
-     * @param cell
-     * @return
-     */
-    private String getCellStringValue(Cell cell) {
-        String value = "";
-        if (null == cell) {
-            return value;
-        }
-
-        CellType cellTypeEnum = cell.getCellTypeEnum();
-        if (cellTypeEnum == CellType.NUMERIC) {
-            cell.setCellType(CellType.STRING);
-        }
-        return cell.getStringCellValue();
     }
 
     /**
@@ -942,25 +852,32 @@ public class AttendanceServiceImpl implements AttendanceService {
     /**
      * 获取加班标记 超过晚上八点打下班卡
      *
+     * @param time1 打卡时间1
      * @param time2 打卡时间2
      * @param time3 打卡时间3
      * @param time4 打卡时间4
      * @return 是否加班
      */
-    private boolean getOvertimeMarking(String time2, String time3, String time4) {
+    private boolean getOvertimeMarking(String time1, String time2, String time3, String time4) {
         try {
+            time1 = time1.replace("昨日 ", "").replace("次日 ", "");
             time2 = time2.replace("昨日 ", "").replace("次日 ", "");
             time3 = time3.replace("昨日 ", "").replace("次日 ", "");
             time4 = time4.replace("昨日 ", "").replace("次日 ", "");
 
-            for (String time : Lists.newArrayList(time4, time3, time2)) {
-                if (StringUtils.isNotEmpty(time)) {
-                    // 拆分时间
-                    String[] split = time.split(":");
-                    int num1 = Integer.valueOf(split[0]);
-                    if (num1 == 20) {
-                        return true;
-                    }
+            List<String> list = Lists.newArrayList(time4, time3, time2, time1).stream().filter(t -> StringUtils.isNotEmpty(t)).collect(Collectors.toList());
+            if (list.size() > 1) {
+                String s = list.get(list.size() - 1);
+                // 拆分时间
+                String[] split1 = s.split(":");
+                int num = Integer.valueOf(split1[0]);
+
+                String time = list.get(0);
+                // 拆分时间
+                String[] split = time.split(":");
+                int num1 = Integer.valueOf(split[0]);
+                if (num1 >= 20 && num < 15) {
+                    return true;
                 }
             }
             return false;
@@ -972,26 +889,27 @@ public class AttendanceServiceImpl implements AttendanceService {
     /**
      * 获取夜班标记 晚上00点前打上班卡，早上八点之后打下班卡
      *
+     * @param time1 打卡时间1
      * @param time2 打卡时间2
      * @param time3 打卡时间3
      * @param time4 打卡时间4
      * @return 是否加班
      */
-    private boolean getNightShiftSign(String time2, String time3, String time4) {
+    private boolean getNightShiftSign(String time1, String time2, String time3, String time4) {
         try {
+            time1 = time1.replace("昨日 ", "").replace("次日 ", "");
             time2 = time2.replace("昨日 ", "").replace("次日 ", "");
             time3 = time3.replace("昨日 ", "").replace("次日 ", "");
             time4 = time4.replace("昨日 ", "").replace("次日 ", "");
 
-            List<String> list = Lists.newArrayList(time2, time3, time4);
-            for (String time : list) {
-                if (StringUtils.isNotEmpty(time)) {
-                    // 拆分时间
-                    String[] split = time.split(":");
-                    int num1 = Integer.valueOf(split[0]);
-                    if (num1 == 8) {
-                        return true;
-                    }
+            List<String> list = Lists.newArrayList(time4, time3, time2, time1).stream().filter(t -> StringUtils.isNotEmpty(t)).collect(Collectors.toList());
+            if (list.size() > 1) {
+                String time = list.get(0);
+                // 拆分时间
+                String[] split = time.split(":");
+                int num1 = Integer.valueOf(split[0]);
+                if (num1 == 8 || num1 == 9) {
+                    return true;
                 }
             }
         } catch (Exception e) {
