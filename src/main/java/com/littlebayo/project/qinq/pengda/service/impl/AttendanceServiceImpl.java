@@ -451,9 +451,11 @@ public class AttendanceServiceImpl implements AttendanceService {
                                 if (CollectionUtils.isNotEmpty(collect)) {
                                     if (collect.get(0).indexOf("补卡") > -1) {
                                         rown1Cell.setCellValue("⊙");
+                                        loudakaCishu++;
                                     }
                                     if (collect.get(collect.size() - 1).indexOf("补卡") > -1) {
                                         rown2Cell.setCellValue("⊙");
+                                        loudakaCishu++;
                                     }
                                 }
                             }
