@@ -201,7 +201,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * TODO 生成x月考勤表统计【表一】
+     * 生成x月考勤表统计【表一】
      *
      * @param dingdingDailyStatistics   用户的打卡记录
      * @param dingdingMonthlyStatistics 用户的打卡月统计
@@ -310,6 +310,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         Row row3 = sheet.createRow(rowIndex++);
         row3.setHeightInPoints(49.5f);
         int row3cellIndex = 16;
+
+        // 冻结前四行
+        sheet.createFreezePane(0, 4, 0, 5);
+
         // 合并单元格
         for (int i = 0; i < 16; i++) {
             Cell cell = row3.createCell(i, CellType.STRING);
@@ -340,6 +344,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         todoCellStyle.setFillForegroundColor(HSSFColor.ORANGE.index);
 
         // 开始填充数据
+        int rowCount = 1;
         for (int i = 0; i < dingdingDailyStatistics.size(); i++) {
             DingdingDailyStatistics statistics = dingdingDailyStatistics.get(i);
             String userId = statistics.getUserId();
@@ -362,7 +367,7 @@ public class AttendanceServiceImpl implements AttendanceService {
              */
             Integer workOvertimeCount = workOvertimeMap.get(userId);
             Integer nightShiftCount = nightShiftMap.get(userId);
-            List<String> dayContentList = Lists.newArrayList(String.valueOf(i + 1), statistics.getName(), "",
+            List<String> dayContentList = Lists.newArrayList(String.valueOf(rowCount++), statistics.getName(), "",
                     monthlyStatistics.getChuqinTianshu(), "", "", "", "", "", "", "", "", "",
                     String.valueOf(null == nightShiftCount ? 0 : nightShiftCount), String.valueOf(null == workOvertimeCount ? 0 : workOvertimeCount), "");
             for (String day : dayContentList) {
@@ -437,6 +442,22 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown1Cell.setCellStyle(titleCellStyle2);
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
+                            // 需要判断是否存在补卡，如果存在补卡，则应该是漏打卡
+                            DingdingPunchInRecord record = punchInRecords1.get(j - 1);
+                            if (null != record) {
+                                List<String> collect = Lists.newArrayList(record.getGoToWorkClockoutResults1(), record.getGoOffWorkClockoutResults1(),
+                                        record.getGoToWorkClockoutResults2(), record.getGoOffWorkClockoutResults2()).stream()
+                                        .filter(s -> StringUtils.isNotEmpty(s)).collect(Collectors.toList());
+                                if (CollectionUtils.isNotEmpty(collect)) {
+                                    if (collect.get(0).indexOf("补卡") > -1) {
+                                        rown1Cell.setCellValue("⊙");
+                                    }
+                                    if (collect.get(collect.size() - 1).indexOf("补卡") > -1) {
+                                        rown2Cell.setCellValue("⊙");
+                                    }
+                                }
+                            }
+
                             continue;
                         }
                         // 月打卡改天休息或者旷工
@@ -472,6 +493,10 @@ public class AttendanceServiceImpl implements AttendanceService {
                             rown2Cell.setCellValue("√");
                             rown2Cell.setCellStyle(titleCellStyle2);
                             loudakaCishu++;
+                            // 如果是一号的上班未打卡，可能是客服部的大夜班，上班卡在上个月的表格里面，需要注意
+                            if (j == 1 && statistics.getAttendanceContent().equals("客服")) {
+                                rown1Cell.setCellStyle(todoCellStyle);
+                            }
                             continue;
                         }
                         // 月打卡-下班缺卡
@@ -688,6 +713,9 @@ public class AttendanceServiceImpl implements AttendanceService {
             row1celli.setCellValue(datatimeStrMap.get(key));
             row1celli.setCellStyle(titleCellStyle2);
         }
+
+        // 冻结前2行
+        sheet.createFreezePane(0, 2, 0, 3);
 
         /**
          * 3. 开始填充真实数据
